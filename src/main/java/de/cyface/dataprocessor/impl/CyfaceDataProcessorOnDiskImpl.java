@@ -19,10 +19,10 @@ import de.cyface.dataprocessor.AbstractCyfaceDataProcessor;
 /**
  * This implementation of the CyfaceDataProcessor is optimized to use as less memory as possible. Therefore the
  * local file system is utilized to create binary temp files for each sensor.
- * 
+ *
  * @author Philipp Grubitzsch
  * @since 0.2.0
- *
+ * @version 1.0.0
  */
 public class CyfaceDataProcessorOnDiskImpl extends AbstractCyfaceDataProcessor {
 
@@ -34,12 +34,13 @@ public class CyfaceDataProcessorOnDiskImpl extends AbstractCyfaceDataProcessor {
     File tempAccFile;
     File tempRotFile;
     File tempDirFile;
+    File tempEventFile;
 
     File uncompressedTempfile;
 
     /**
      * Constructor for the Processor
-     * 
+     *
      * @param binaryInputStream the binary input either compressed or uncompressed
      * @param compressed flag to tell the processor if the binary input is compressed
      * @throws IOException
@@ -208,6 +209,28 @@ public class CyfaceDataProcessorOnDiskImpl extends AbstractCyfaceDataProcessor {
         }
     }
 
+    FileInputStream eventFileInputStream;
+
+    @Override
+    protected InputStream getSpecificEventInputStream() {
+        if (eventFileInputStream != null) {
+            return eventFileInputStream;
+        } else {
+            if (tempEventFile != null) {
+                try {
+                    eventFileInputStream = new FileInputStream(tempEventFile);
+                    return eventFileInputStream;
+                } catch (FileNotFoundException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                    return null;
+                }
+            } else {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+        }
+    }
+
     @Override
     protected OutputStream getTempLocOutputStream() {
         tempLocFile = new File(uncompressedTempfile + "_loc");
@@ -256,4 +279,15 @@ public class CyfaceDataProcessorOnDiskImpl extends AbstractCyfaceDataProcessor {
         }
     }
 
+    @Override
+    protected OutputStream getTempEventOutputStream() {
+        tempEventFile = new File(uncompressedTempfile + "_event");
+        try {
+            return new FileOutputStream(tempEventFile);
+        } catch (FileNotFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            return null;
+        }
+    }
 }

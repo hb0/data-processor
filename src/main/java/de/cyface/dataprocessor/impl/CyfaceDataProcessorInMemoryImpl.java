@@ -13,10 +13,10 @@ import de.cyface.dataprocessor.AbstractCyfaceDataProcessor;
 /**
  * This implementation of the CyfaceDataProcessor is optimized for maximum performance. Therefore memory (RAM) is
  * utilized to create binary temp arrays for each sensor.
- * 
+ *
  * @author Philipp Grubitzsch
  * @since 0.2.0
- *
+ * @version 1.0.0
  */
 public class CyfaceDataProcessorInMemoryImpl extends AbstractCyfaceDataProcessor {
 
@@ -26,6 +26,7 @@ public class CyfaceDataProcessorInMemoryImpl extends AbstractCyfaceDataProcessor
     ByteArrayOutputStream tempAccBin;
     ByteArrayOutputStream tempRotBin;
     ByteArrayOutputStream tempDirBin;
+    ByteArrayOutputStream tempEventBin;
 
     ByteArrayOutputStream uncompressedTempBin;
 
@@ -127,6 +128,22 @@ public class CyfaceDataProcessorInMemoryImpl extends AbstractCyfaceDataProcessor
         }
     }
 
+    ByteArrayInputStream eventByteArrayStream;
+
+    @Override
+    protected InputStream getSpecificEventInputStream() {
+        if (eventByteArrayStream != null) {
+            return eventByteArrayStream;
+        } else {
+            if (tempEventBin != null) {
+                eventByteArrayStream = new ByteArrayInputStream(tempEventBin.toByteArray());
+                return eventByteArrayStream;
+            } else {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+        }
+    }
+
     @Override
     protected OutputStream getTempLocOutputStream() {
         this.tempLocBin = new ByteArrayOutputStream();
@@ -151,4 +168,9 @@ public class CyfaceDataProcessorInMemoryImpl extends AbstractCyfaceDataProcessor
         return tempDirBin;
     }
 
+    @Override
+    protected OutputStream getTempEventOutputStream() {
+        this.tempEventBin = new ByteArrayOutputStream();
+        return tempEventBin;
+    }
 }

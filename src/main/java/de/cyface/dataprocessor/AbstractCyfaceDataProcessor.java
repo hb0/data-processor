@@ -13,6 +13,7 @@ import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 import java.util.zip.ZipException;
 
+import de.cyface.data.Event;
 import org.apache.commons.io.IOUtils;
 
 import de.cyface.data.ByteSizes;
@@ -20,17 +21,19 @@ import de.cyface.data.LocationPoint;
 import de.cyface.data.Point3D;
 import de.cyface.data.Point3D.TypePoint3D;
 
+import static de.cyface.dataprocessor.CyfaceEventsDeserializer.deserializeEvent;
+import static de.cyface.dataprocessor.CyfaceEventsDeserializer.deserializeEventFixedLengthPart;
+
 /**
  * The CyfaceDataProcessor can be used to easily convert sensor data from the Cyface binary
  * format, either plain (.cyf) or compressed (.ccyf), in an arbitrary format. It uses InputStreams and OutputStreams for
  * conversion. Thus, an a specific implementation can used diefferent approaches for buffering data, e.g. in file system
  * or in memory. Several functions allow to poll single sensor values from those files as {@link LocationPoint} or
  * {@link Point3D} or objects, which contain the human readable data for further processing.
- * 
- * @since 0.2.0
- * 
- * @author Philipp Grubitzsch
  *
+ * @author Philipp Grubitzsch
+ * @since 0.2.0
+ * @version 1.0.0
  */
 public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor {
 
@@ -41,6 +44,7 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
     protected boolean uncompressed = false;
     protected boolean prepared = false;
     private CyfaceBinaryHeader header;
+    private CyfaceEventsBinaryHeader eventsHeader;
 
     protected InputStream uncompressedBinaryInputStream;
     protected OutputStream uncompressedBinaryOutputStream;
@@ -76,9 +80,25 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
     }
 
     @Override
+    public CyfaceEventsBinaryHeader getEventsHeader() throws CyfaceCompressedDataProcessorException, IOException {
+        if (eventsHeader == null) {
+            this.readEventsHeader();
+        }
+
+        return eventsHeader;
+    }
+
+    @Override
     public CyfaceDataProcessor uncompressAndPrepare() throws IOException, CyfaceCompressedDataProcessorException {
         uncompress();
         prepare();
+        return this;
+    }
+
+    @Override
+    public CyfaceDataProcessor uncompressAndPrepareEvents() throws IOException, CyfaceCompressedDataProcessorException {
+        uncompress();
+        prepareEvents();
         return this;
     }
 
@@ -105,6 +125,11 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
      * @return an implementation of an OutputStream that can be used to buffer binary direction data output
      */
     protected abstract OutputStream getTempDirOutputStream();
+
+    /**
+     * @return an implementation of an OutputStream that can be used to buffer binary events data output
+     */
+    protected abstract OutputStream getTempEventOutputStream();
 
     /**
      * Except for the header, split each part of the uncompressed input binary to a separate bin for easy separate
@@ -150,6 +175,34 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
             int dirBytesCount = ByteSizes.BYTES_IN_ONE_POINT_ENTRY * this.getHeader().getNumberOfDirections();
             copyStream(uncompressedBinaryInputStream, binDirTemp, 0, dirBytesCount);
             binDirTemp.close();
+        }
+
+        // close input stream
+        uncompressedBinaryInputStream.close();
+
+        prepared = true;
+    }
+
+    /**
+     * Except for the header, throw the remaining uncompressed input to a separate bin for easy separate access of arbitrary event data.
+     * The implementation depends on the type of CyfaceDataProcessor (e.g. file system or in-memory).
+     *
+     * @throws IOException
+     * @throws CyfaceCompressedDataProcessorException
+     */
+    protected void prepareEvents() throws IOException, CyfaceCompressedDataProcessorException {
+        // write out events data
+        if (this.getEventsHeader().getNumberOfEvents() > 0) {
+            OutputStream binEventTemp = getTempEventOutputStream();
+
+            // Copy everything to keep the processing structure link in prepare() for now
+            // In prepareEvents() we ony have the data of one data type so no splitting is required
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = uncompressedBinaryInputStream.read(buffer)) != -1) {
+                binEventTemp.write(buffer, 0, len);
+            }
+            binEventTemp.close();
         }
 
         // close input stream
@@ -348,6 +401,51 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
         return nextPoint;
     }
 
+    BufferedInputStream tempEventStream;
+
+    /**
+     * @return an implementation of an InputStream to read buffered binary event data from
+     */
+    protected abstract InputStream getSpecificEventInputStream();
+
+    @Override
+    public Event pollNextEvent() throws CyfaceCompressedDataProcessorException, IOException {
+        checkPreparedOrThrowException();
+
+        // Events don't have a fixed binary length.
+        // Thus, we first need to read the "head" which contains information about the tail length
+
+        // Load Event fixed length part
+        if (tempEventStream == null) {
+            tempEventStream = new BufferedInputStream(getSpecificEventInputStream(),
+                    ByteSizes.BYTES_IN_FIXED_LENGTH_PART_OF_ONE_EVENT_ENTRY);
+        }
+        byte[] eventHeadBytes = new byte[ByteSizes.BYTES_IN_FIXED_LENGTH_PART_OF_ONE_EVENT_ENTRY];
+        int read = tempEventStream.read(eventHeadBytes, 0, ByteSizes.BYTES_IN_FIXED_LENGTH_PART_OF_ONE_EVENT_ENTRY);
+        if (read != -1) {
+            final CyfaceEventsDeserializer.FixedLengthEventPart partialEvent = deserializeEventFixedLengthPart(eventHeadBytes);
+
+            // Events of EventType different from MODALITY_TYPE_CHANGE don't have a value
+            if (partialEvent.valueByteLength == 0) {
+                return new Event(1L, partialEvent.eventType, partialEvent.timestamp, null);
+            }
+            tempEventStream.close();
+
+            // Load variable Event part
+            tempEventStream = new BufferedInputStream(getSpecificEventInputStream(), partialEvent.valueByteLength);
+            byte[] eventTailBytes = new byte[partialEvent.valueByteLength];
+            int readTail = tempEventStream.read(eventTailBytes, 0, partialEvent.valueByteLength);
+            if (readTail == -1) {
+                throw new IllegalStateException("Unexpected end of stream");
+            }
+
+            return deserializeEvent(partialEvent, eventTailBytes);
+        } else {
+            tempEventStream.close();
+            return null;
+        }
+    }
+
     /**
      * Deserializes a single geo location from an array of bytes in Cyface binary format.
      *
@@ -481,6 +579,18 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
                 + header.getNumberOfAccelerations() * ByteSizes.BYTES_IN_ONE_POINT_ENTRY);
         header.setBeginOfDirectionsIndex(
                 header.getBeginOfRotationsIndex() + header.getNumberOfRotations() * ByteSizes.BYTES_IN_ONE_POINT_ENTRY);
+    }
+
+    private void readEventsHeader() throws CyfaceCompressedDataProcessorException, IOException {
+        checkUncompressedOrThrowException();
+        final byte[] individualBytes = new byte[6];
+        uncompressedBinaryInputStream.read(individualBytes, 0, 6);
+
+        final ByteBuffer buffer = ByteBuffer.wrap(individualBytes);
+        this.eventsHeader = new CyfaceEventsBinaryHeader();
+        eventsHeader.setFormatVersion(buffer.order(ByteOrder.BIG_ENDIAN).getShort(0));
+        eventsHeader.setNumberOfEvents(buffer.order(ByteOrder.BIG_ENDIAN).getInt(2));
+        eventsHeader.setBeginOfEventsIndex(6);
     }
 
     protected void checkUncompressedOrThrowException() throws CyfaceCompressedDataProcessorException {

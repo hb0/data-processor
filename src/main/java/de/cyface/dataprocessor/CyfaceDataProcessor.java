@@ -3,6 +3,7 @@ package de.cyface.dataprocessor;
 import java.io.Closeable;
 import java.io.IOException;
 
+import de.cyface.data.Event;
 import de.cyface.data.LocationPoint;
 import de.cyface.data.Point3D;
 import de.cyface.dataprocessor.AbstractCyfaceDataProcessor.CyfaceCompressedDataProcessorException;
@@ -11,7 +12,7 @@ import de.cyface.dataprocessor.AbstractCyfaceDataProcessor.CyfaceCompressedDataP
  * 
  * @author Philipp Grubitzsch
  * @since 0.2.0
- *
+ * @version 1.0.0
  */
 public interface CyfaceDataProcessor extends Closeable {
 
@@ -44,6 +45,15 @@ public interface CyfaceDataProcessor extends Closeable {
      * @throws CyfaceCompressedDataProcessorException
      */
     public CyfaceDataProcessor uncompressAndPrepare() throws IOException, CyfaceCompressedDataProcessorException;
+
+    /**
+     * This method uncompress and prepare data to easily access arbitrary event data.
+     *
+     * @return The instance of this specific Processor for fluently usage
+     * @throws IOException
+     * @throws CyfaceCompressedDataProcessorException
+     */
+    public CyfaceDataProcessor uncompressAndPrepareEvents() throws IOException, CyfaceCompressedDataProcessorException;
 
     /**
      * This method uncompress binary data.
@@ -91,6 +101,15 @@ public interface CyfaceDataProcessor extends Closeable {
     public Point3D pollNextDirectionPoint() throws CyfaceCompressedDataProcessorException, IOException;
 
     /**
+     * Polls the next available event from event binary temp file
+     *
+     * @return an Event or null, if all entries have been already read.
+     * @throws CyfaceCompressedDataProcessorException
+     * @throws IOException
+     */
+    public Event pollNextEvent() throws CyfaceCompressedDataProcessorException, IOException;
+
+    /**
      * Get the Header. Requires isUncompressed() true.
      * 
      * @return the CyfaceBinaryHeader
@@ -98,5 +117,14 @@ public interface CyfaceDataProcessor extends Closeable {
      * @throws IOException
      */
     public CyfaceBinaryHeader getHeader() throws CyfaceCompressedDataProcessorException, IOException;
+
+    /**
+     * Get the Events Binary Header. Requires isUncompressed() true.
+     *
+     * @return the CyfaceEventsBinaryHeader
+     * @throws CyfaceCompressedDataProcessorException
+     * @throws IOException
+     */
+    public CyfaceEventsBinaryHeader getEventsHeader() throws CyfaceCompressedDataProcessorException, IOException;
 
 }

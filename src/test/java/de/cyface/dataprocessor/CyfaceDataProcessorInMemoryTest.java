@@ -1,28 +1,27 @@
 package de.cyface.dataprocessor;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertEquals;
+import de.cyface.data.Event;
+import de.cyface.data.LocationPoint;
+import de.cyface.data.Point3D;
+import de.cyface.dataprocessor.AbstractCyfaceDataProcessor.CyfaceCompressedDataProcessorException;
+import de.cyface.dataprocessor.impl.CyfaceDataProcessorInMemoryImpl;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import de.cyface.data.LocationPoint;
-import de.cyface.data.Point3D;
-import de.cyface.dataprocessor.AbstractCyfaceDataProcessor.CyfaceCompressedDataProcessorException;
-import de.cyface.dataprocessor.impl.CyfaceDataProcessorInMemoryImpl;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertEquals;
 
 /**
- * 
  * @author Philipp Grubitzsch
- *
  */
 public class CyfaceDataProcessorInMemoryTest {
 
@@ -53,7 +52,7 @@ public class CyfaceDataProcessorInMemoryTest {
 
         ByteBuffer buffer = ByteBuffer.wrap(individualBytes);
         short formatVersion = buffer.order(ByteOrder.BIG_ENDIAN).getShort(0);
-        assertThat(formatVersion, is(equalTo((short)1)));
+        assertThat(formatVersion, is(equalTo((short) 1)));
         int numberOfGeoLocations = buffer.order(ByteOrder.BIG_ENDIAN).getInt(2);
         assertThat(numberOfGeoLocations, is(equalTo(1711)));
         int numberOfAccelerations = buffer.order(ByteOrder.BIG_ENDIAN).getInt(6);
@@ -73,6 +72,62 @@ public class CyfaceDataProcessorInMemoryTest {
         assertEquals(proc.pollNextDirectionPoint().toString(),
                 "timestamp=1521632513534,x=-41.099998474121094,y=10.319999694824219,z=-7.619999885559082,sensortype=DIR");
         printOutData(proc);
+    }
+
+    @Test
+    public void testUncompressCyfaceEventBinary() throws CyfaceCompressedDataProcessorException, IOException {
+
+        // Arrange
+        // Load file
+        final String filePath = this.getClass().getResource("/compressedCyfaceEventData.ccyfe").getFile();
+        final File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IllegalStateException("File does not exist: " + file.getPath());
+        }
+        fileInputStream = new FileInputStream(file);
+
+        // Act
+        // Uncompress file
+        proc = new CyfaceDataProcessorInMemoryImpl(fileInputStream, true);
+        proc.uncompressAndPrepareEvents();
+
+        // Print binary header
+        CyfaceEventsBinaryHeader header = proc.getEventsHeader();
+        System.out.println(header);
+
+        // Assert
+        // Uncompressed size
+        byte[] individualBytes = proc.getUncompressedBinaryAsArray();
+        assertEquals(107L, individualBytes.length);
+
+        // Event file header
+        ByteBuffer buffer = ByteBuffer.wrap(individualBytes);
+        short formatVersion = buffer.order(ByteOrder.BIG_ENDIAN).getShort(0);
+        assertThat(formatVersion, is(equalTo((short) 1)));
+        int numberOfEvents = buffer.order(ByteOrder.BIG_ENDIAN).getInt(2);
+        assertThat(numberOfEvents, is(equalTo(7)));
+
+        // Event file body (i.e. Events)
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=LIFECYCLE_START, timestamp=1569851796790, value='null'}")));
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=MODALITY_TYPE_CHANGE, timestamp=1569851796790, value='WALKING'}")));
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=LIFECYCLE_PAUSE, timestamp=1569851806916, value='null'}")));
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=MODALITY_TYPE_CHANGE, timestamp=1569851808902, value='BUS'}")));
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=LIFECYCLE_RESUME, timestamp=1569851810092, value='null'}")));
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=MODALITY_TYPE_CHANGE, timestamp=1569851819811, value='BICYCLE'}")));
+        assertThat(proc.pollNextEvent().toString(), is(equalTo(
+                "Event{id=1, type=LIFECYCLE_STOP, timestamp=1569851840548, value='null'}")));
+
+        // This can be used to test-deserialize other .ccyfe files and assert the content manually instead of the section above
+        /*Event event;
+        while((event = proc.pollNextEvent()) != null){
+            System.out.println("Event: " + event.toString());
+        }*/
     }
 
     @Test
@@ -156,7 +211,7 @@ public class CyfaceDataProcessorInMemoryTest {
 
         ByteBuffer buffer = ByteBuffer.wrap(individualBytes);
         short formatVersion = buffer.order(ByteOrder.BIG_ENDIAN).getShort(0);
-        assertThat(formatVersion, is(equalTo((short)1)));
+        assertThat(formatVersion, is(equalTo((short) 1)));
         int numberOfGeoLocations = buffer.order(ByteOrder.BIG_ENDIAN).getInt(2);
         assertThat(numberOfGeoLocations, is(equalTo(1711)));
         int numberOfAccelerations = buffer.order(ByteOrder.BIG_ENDIAN).getInt(6);
@@ -178,7 +233,6 @@ public class CyfaceDataProcessorInMemoryTest {
     }
 
     /**
-     * 
      * @throws CyfaceCompressedDataProcessorException
      * @throws IOException
      */
@@ -202,7 +256,7 @@ public class CyfaceDataProcessorInMemoryTest {
 
     /**
      * Early 2019 version of iOS component submitted uncompressed data
-     * 
+     *
      * @throws CyfaceCompressedDataProcessorException
      * @throws IOException
      */
@@ -263,6 +317,12 @@ public class CyfaceDataProcessorInMemoryTest {
         while ((dirItem = proc.pollNextDirectionPoint()) != null) {
             count++;
             // System.out.println(dirItem.toString());
+        }
+
+        Event eventItem;
+        while ((eventItem = proc.pollNextEvent()) != null) {
+            count++;
+            // System.out.println("Event: " + eventItem.toString());
         }
 
         long processNanoTime = (System.nanoTime() - start);

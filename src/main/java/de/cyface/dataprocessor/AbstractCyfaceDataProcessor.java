@@ -53,6 +53,7 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
 
     private InflaterInputStream inflaterInputStream;
     private InputStream binaryInputStream;
+    private long length;
 
     public AbstractCyfaceDataProcessor(InputStream binaryInputStream, boolean compressed) {
         Objects.requireNonNull(binaryInputStream, "InputStream must not be null.");
@@ -144,24 +145,24 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
         // getHeader();
 
         // write out geo locations
-        if (this.getHeader().getNumberOfGeoLocations() > 0) {
+        /*if (this.getHeader().getNumberOfGeoLocations() > 0) {
             OutputStream binLocationTemp = getTempLocOutputStream();
             int locationBytesCount = this.getHeader().getNumberOfGeoLocations()
                     * ByteSizes.BYTES_IN_ONE_GEO_LOCATION_ENTRY;
             copyStream(uncompressedBinaryInputStream, binLocationTemp, 0, locationBytesCount);
             binLocationTemp.close();
-        }
+        }*/
         // write out accelerometer data
-        if (this.getHeader().getNumberOfAccelerations() > 0) {
+        //if (this.getHeader().getNumberOfAccelerations() > 0) {
 
             OutputStream binAccTemp = getTempAccOutputStream();
-            int accBytesCount = this.getHeader().getNumberOfAccelerations() * ByteSizes.BYTES_IN_ONE_POINT_ENTRY;
-            copyStream(uncompressedBinaryInputStream, binAccTemp, 0, accBytesCount);
+            //int accBytesCount = this.getHeader().getNumberOfAccelerations() * ByteSizes.BYTES_IN_ONE_POINT_ENTRY;
+            copyStream(uncompressedBinaryInputStream, binAccTemp, 0, length);
             binAccTemp.close();
-        }
+        //}
 
         // write out rotation data
-        if (this.getHeader().getNumberOfRotations() > 0) {
+        /*if (this.getHeader().getNumberOfRotations() > 0) {
 
             OutputStream binRotTemp = getTempRotOutputStream();
             int rotBytesCount = this.getHeader().getNumberOfRotations() * ByteSizes.BYTES_IN_ONE_POINT_ENTRY;
@@ -175,7 +176,7 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
             int dirBytesCount = ByteSizes.BYTES_IN_ONE_POINT_ENTRY * this.getHeader().getNumberOfDirections();
             copyStream(uncompressedBinaryInputStream, binDirTemp, 0, dirBytesCount);
             binDirTemp.close();
-        }
+        }*/
 
         // close input stream
         uncompressedBinaryInputStream.close();
@@ -546,6 +547,10 @@ public abstract class AbstractCyfaceDataProcessor implements CyfaceDataProcessor
             return null;
         }
     }
+
+    public void setLength(long length) {
+        this.length = length;
+    };
 
     public static final class CyfaceCompressedDataProcessorException extends Exception {
 
